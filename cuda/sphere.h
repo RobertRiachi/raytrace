@@ -8,9 +8,10 @@ class sphere: public sceneobject {
     public:
         point3 center;
         float radius;
+        material *mat_ptr;
 
         __device__ sphere() {}
-        __device__ sphere(point3 cen, float r): center(cen), radius(r) {};
+        __device__ sphere(point3 cen, float r, material *m): center(cen), radius(r), mat_ptr(m) {};
         __device__ virtual bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const override;
 
 };
@@ -34,7 +35,9 @@ __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& 
     if (root_1 < t_max && root_1 > t_min){
         rec.t = root_1;
         rec.p = r.compute_at(rec.t);
-        rec.normal = (rec.p - center) / radius;
+        vec3 outward_normal = (rec.p - center) / radius;
+        rec.set_face_normal(r, outward_normal);
+        rec.mat_ptr = mat_ptr;
         return true;
     }
 
@@ -43,7 +46,9 @@ __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& 
     if (root_2 < t_max && root_2 > t_min) {
         rec.t = root_2;
         rec.p = r.compute_at(rec.t);
-        rec.normal = (rec.p - center) / radius;
+        vec3 outward_normal = (rec.p - center) / radius;
+        rec.set_face_normal(r, outward_normal);
+        rec.mat_ptr = mat_ptr;
         return true;
     }
 

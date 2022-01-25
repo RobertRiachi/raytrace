@@ -26,6 +26,16 @@ class vec3 {
             e[2] += v.e[2];
             return *this;
         }
+        __host__ __device__ vec3& operator*=(const vec3 &v) {
+            e[0] *= v.e[0];
+            e[1] *= v.e[1];
+            e[2] *= v.e[2];
+            return *this;
+        }
+
+        __host__ __device__ inline vec3& operator/=(const float t);
+        __host__ __device__ inline vec3 operator-() const {return vec3(-e[0], -e[1], -e[2]); }
+
 };
 
 // Aliases
@@ -75,9 +85,63 @@ __host__ __device__ inline vec3 cross(const vec3 &u, const vec3 &v) {
     return vec3(i,j,k);
 }
 
+__host__ __device__ inline vec3& vec3::operator/=(const float t) {
+    float k = 1.0/t;
+
+    e[0]  *= k;
+    e[1]  *= k;
+    e[2]  *= k;
+    return *this;
+}
+
 // convert to unit vector
 __host__ __device__ inline vec3 unit_vector(vec3 v) {
     return v/v.length();
 }
+
+__device__ vec3 random_in_unit_sphere(curandState *local_rand_state) {
+    vec3 rand_vec = vec3(curand_uniform(local_rand_state), curand_uniform(local_rand_state), curand_uniform(local_rand_state));
+    auto p = 2.0f * rand_vec - vec3(1, 1, 1);
+
+    while (dot(p,p) >= 1.0f) {
+        // Keep generating because it's outside of the unit sphere
+        rand_vec = vec3(curand_uniform(local_rand_state), curand_uniform(local_rand_state), curand_uniform(local_rand_state));
+        p = 2.0f * rand_vec - vec3(1, 1, 1);
+    }
+    return p;
+}
+
+__device__ vec3 random_in_unit_disk(curandState *local_rand_state) {
+
+    // Generates random floats between -1 and 1 for x and y
+    vec3 p = 2.0f*vec3(curand_uniform(local_rand_state), curand_uniform(local_rand_state), 0) - vec3(1,1,0);
+    while (dot(p,p) >= 1.0f) {
+        // Keep generating because it's outside of unit disk
+        p = 2.0f*vec3(curand_uniform(local_rand_state), curand_uniform(local_rand_state), 0) - vec3(1,1,0);
+    }
+    return p;
+}
+
+__device__ vec3 random_in_hemisphere(const vec3 &normal, curandState *local_rand_state) {
+    vec3 in_unit_sphere = random_in_unit_sphere(local_rand_state);
+    // In same hemisphere as normal
+    if (dot(in_unit_sphere, normal) > 0.0f) {
+        return in_unit_sphere;
+    } else {
+        return -in_unit_sphere;
+    }
+}
+
+__device__ vec3 reflect(const vec3& v, const vec3& n) {
+    return v - 2.0f*dot(v,n)*n;
+}
+
+__device__ vec3 refract(const vec3& uv, const vec3& n, float etai_over_etat) {
+    auto cos_theta = fmin(dot(-uv, n), 1.0f);
+    vec3 r_out_perp =  etai_over_etat * (uv + cos_theta*n);
+    vec3 r_out_parallel = -sqrt(fabs(1.0f - r_out_perp.length_squared())) * n;
+    return r_out_perp + r_out_parallel;
+}
+
 
 #endif

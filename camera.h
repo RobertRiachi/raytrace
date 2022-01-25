@@ -17,7 +17,7 @@ class camera{
 
         //vertival field of view in degrees, aspect_ratio
         camera(point3 lookfrom, point3 lookat, vec3 vup, double vfov, 
-                double aspect_ratio, double aperature, double focus_dist) {
+                double aspect_ratio, double aperture, double focus_dist) {
             
             // Define Scene Camera centered at lookfrom
             double theta = degrees_to_rads(vfov);
@@ -34,7 +34,7 @@ class camera{
             vertical = focus_dist * viewport_height * v;
             lower_left_corner = origin - horizontal/2 - vertical/2 - focus_dist*w;
 
-            lens_radius = aperature / 2;
+            lens_radius = aperture / 2;
         }
 
         ray get_ray(double s, double t) const {
