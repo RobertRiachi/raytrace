@@ -72,7 +72,7 @@ __global__ void create_world(sceneobject **d_list, sceneobject **d_world, camera
         float dist_to_focus = 10.0f;
         float aperture = 0.1f;
 
-        *d_camera = new camera(lookfrom, lookat, vec3(0,1,0), 30.0, aspect_ratio, aperture, dist_to_focus);
+        *d_camera = new camera(lookfrom, lookat, 0.0, vec3(0,1,0), 30.0, aspect_ratio, aperture, dist_to_focus);
     }
 }
 
@@ -91,15 +91,11 @@ __global__ void init_world(curandState *rand_state, int seed = clock()) {
     }
 }
 
-/*
-__global__ void init_objects(curandState *rand_state, int num_objects, int seed) {
-    int t_idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (t_idx >= num_objects) return;
-
-    curand_init(seed)
+__global__ void update_scene(camera **d_camera, float new_camera_angle) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        (*d_camera)->rotate_camera_y(new_camera_angle);
+    }
 }
-*/
 
 __global__ void init_render(int max_x, int max_y, curandState *rand_state, int seed = clock()) {
     int idx_x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -197,7 +193,7 @@ int main(void) {
     // Image
     const float aspect_ratio = 16.0 / 9.0;
     const int image_width = 1920;
-    //const int image_width = 1200;
+    //const int image_width = 400;
     const int image_height = static_cast<int>(image_width / aspect_ratio);
     const int num_samples = 10;
     const int ray_bounce_limit = 50;
@@ -206,12 +202,6 @@ int main(void) {
 
     int num_objects = 22*22+1+3;
     //int seed = 42069;
-
-    size_t fb_size = num_pixels * sizeof(vec3);
-
-    // Image buffer
-    vec3 *fb;
-    gpuErrchk(cudaMallocManaged((void **) &fb, fb_size));
 
     // Init rand state
     curandState *d_rand_state;
@@ -257,24 +247,53 @@ int main(void) {
     dim3 blocks(image_width / thread_x + 1, image_height / thread_y + 1);
     dim3 threads(thread_x, thread_y);
 
-    std::cerr << "Rendering a " << image_width << "x" << image_height << " image ";
+    int num_images = 90;
+
+    std::cerr << "Rendering " << num_images << " " << image_width << "x" << image_height << " images ";
     std::cerr << "in " << thread_x << "x" << thread_y << " blocks.\n";
 
     init_render<<<blocks, threads>>>(image_width, image_height, d_rand_state);
     gpuErrchk(cudaGetLastError());
     gpuErrchk(cudaDeviceSynchronize());
 
-    render<<<blocks, threads>>>(fb, image_width, image_height, num_samples, d_camera, d_world, d_rand_state,
-                                ray_bounce_limit);
-    gpuErrchk(cudaGetLastError());
-    gpuErrchk(cudaDeviceSynchronize());
+
+    size_t fb_size = num_pixels * sizeof(vec3);
+
+
+    for(int i = 0; i < num_images; i++){
+        std::cerr << "Rendering image " << i << "/" << num_images << "\n";
+        // Init Image buffer
+        vec3 *fb;
+        gpuErrchk(cudaMallocManaged((void **) &fb, fb_size));
+
+        // Render world
+        render<<<blocks, threads>>>(fb, image_width, image_height, num_samples, d_camera, d_world, d_rand_state,
+                                    ray_bounce_limit);
+        gpuErrchk(cudaGetLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+
+
+        // Update scene
+        update_scene<<<1,1>>>(d_camera, 1.0f * (i + 1));
+        gpuErrchk(cudaGetLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+
+        // Output image
+        string image_name = "output/ppm_images/image_" + std::to_string(i) + ".ppm";
+        output_image(image_width, image_height, fb, image_name);
+
+        // Free old buffer
+        gpuErrchk(cudaFree(fb));
+
+    }
 
     stop = clock();
     double timer_seconds = ((double) (stop - start)) / CLOCKS_PER_SEC;
     std::cerr << "took " << timer_seconds << " seconds.\n";
 
     // Output image
-    output_image(image_width, image_height, fb, "image_new.ppm");
+    //output_image(image_width, image_height, fb, "output/ppm_images/image_1.ppm");
+
 
     // Free up
     gpuErrchk(cudaDeviceSynchronize());
@@ -286,6 +305,5 @@ int main(void) {
     gpuErrchk(cudaFree(d_camera));
     gpuErrchk(cudaFree(d_rand_state));
     gpuErrchk(cudaFree(d_rand_state_world));
-    gpuErrchk(cudaFree(fb));
 
 }
