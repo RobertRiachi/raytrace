@@ -27,6 +27,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
 }
 
 #define RND_UNIFORM (curand_uniform(&local_rand_state))
+#define RND_IN_RANGE(LOW,HIGH) (curand_uniform(&local_rand_state) * (HIGH - LOW) + LOW)
+#define PRNT_LOCATION (printf("Frame = %d, x_p = %.6f, y_p = %.6f, z_p = %.6f, x_a %.6f, y_a = %.6f, z_a = %.6f \n", \
+frame,(*d_camera)->look_from.x(),(*d_camera)->look_from.y(),(*d_camera)->look_from.z(),(*d_camera)->angles.x(),(*d_camera)->angles.y(),(*d_camera)->angles.z()));
 
 __global__ void create_world(sceneobject **d_list, sceneobject **d_world, camera **d_camera, float aspect_ratio, curandState *rand_state, int num_objects) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
@@ -38,12 +41,39 @@ __global__ void create_world(sceneobject **d_list, sceneobject **d_world, camera
 
         int i = 1;
 
+        float main_x = RND_IN_RANGE(-4.0, 4.0);
+        float main_z = RND_IN_RANGE(-4.0, 4.0);
+        float x_buffer = 1.0;
+        float z_buffer = 1.0;
+
         // Big balls
         d_list[i++] = new sphere(vec3(0,1,0), 1.0, new dielectric(1.5));
-        d_list[i++] = new sphere(vec3(-4,1,0), 1.0, new lambertian(vec3(0.14,0.5,0.746)));
-        d_list[i++] = new sphere(vec3(4,1,0), 1.0, new metal(vec3(0.7,0.6,0.5), 0.0));
+        d_list[i++] = new sphere(vec3(RND_IN_RANGE(-4.0, 4.0),1,RND_IN_RANGE(-4.0, 4.0)), 1.0, new lambertian(vec3(0.14,0.5,0.746)));
+        d_list[i++] = new sphere(vec3(RND_IN_RANGE(-4.0, 4.0),1,RND_IN_RANGE(-4.0, 4.0)), 1.0, new metal(vec3(0.7,0.6,0.5), 0.0));
 
-        // Remaining balls
+        // Subtract ground and large spheres
+        int num_small_balls = num_objects - 4;
+
+        for (int nb = 0; nb < num_small_balls; nb++) {
+            float choose_material = RND_UNIFORM;
+            float sphere_size = RND_IN_RANGE(0.1,0.35);
+            float x = RND_IN_RANGE(-12,12) + main_x + x_buffer;
+            float z = RND_IN_RANGE(-12,12) + main_z + z_buffer;
+
+            vec3 center(x, sphere_size, z);
+
+            if (choose_material < 0.8f) {
+                d_list[i++] = new sphere(center, sphere_size,
+                                         new lambertian(vec3(RND_UNIFORM*RND_UNIFORM, RND_UNIFORM*RND_UNIFORM, RND_UNIFORM*RND_UNIFORM)));
+            } else if (choose_material < 0.95f) {
+                d_list[i++] = new sphere(center, sphere_size,
+                                         new metal(vec3(0.5f*(1.0f+RND_UNIFORM), 0.5f*(1.0f+RND_UNIFORM), 0.5f*(1.0f+RND_UNIFORM)), 0.5f*RND_UNIFORM));
+            } else {
+                d_list[i++] = new sphere(center, sphere_size, new dielectric(1.5));
+            }
+        }
+
+/*        // Remaining balls
         for (int a = -11; a < 11; a++ ) {
             for (int b = -11; b < 11; b++) {
 
@@ -61,7 +91,7 @@ __global__ void create_world(sceneobject **d_list, sceneobject **d_world, camera
                 }
 
             }
-        }
+        }*/
 
         *rand_state = local_rand_state;
         *d_world = new sceneobject_list(d_list, num_objects);
@@ -104,8 +134,6 @@ __device__ void rotate_scene(camera **d_camera, float new_x_angle, float new_y_a
     }
 }
 
-#define PRNT_LOCATION (printf("Frame = %d, x_p = %.6f, y_p = %.6f, z_p = %.6f, x_a %.6f, y_a = %.6f, z_a = %.6f \n", \
-frame,(*d_camera)->look_from.x(),(*d_camera)->look_from.y(),(*d_camera)->look_from.z(),(*d_camera)->angles.x(),(*d_camera)->angles.y(),(*d_camera)->angles.z()));
 
 __global__ void update_scene(camera **d_camera, int frame) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
