@@ -13,7 +13,7 @@ public:
 
     point3 look_from;
     point3 look_at;
-    float angle;
+    vec3 angles;
     vec3 vup;
     float vfov;
     float aspect_ratio;
@@ -30,33 +30,15 @@ public:
 
     __device__ camera(point3 look_from,
                       point3 look_at,
-                      float angle,
+                      vec3 angles,
                       vec3 vup,
                       float vfov,
                       float aspect_ratio,
                       float aperture,
-                      float focus_dist): look_from(look_from), look_at(look_at), angle(angle), vup(vup), vfov(vfov),
+                      float focus_dist): look_from(look_from), look_at(look_at), angles(angles), vup(vup), vfov(vfov),
                                          aspect_ratio(aspect_ratio), aperture(aperture), focus_dist(focus_dist) {
 
         compute_camera_scene();
-
-        /*
-        float theta = degrees_to_rads(vfov);
-        float h = tan(theta / 2);
-        float viewport_height = 2.0 * h;
-        float viewport_width = aspect_ratio * viewport_height;
-
-        w = unit_vector(lookfrom - lookat);
-        u = unit_vector(cross(vup, w));
-        v = cross(w, u);
-
-        origin = lookfrom;
-        horizontal = focus_dist * viewport_width * u;
-        vertical = focus_dist * viewport_height * v;
-        lower_left_corner = origin - horizontal / 2 - vertical / 2 - focus_dist * w;
-
-        lens_radius = aperture / 2;
-         */
     }
 
     __device__ void compute_camera_scene() {
@@ -76,13 +58,37 @@ public:
         this->lens_radius = this->aperture / 2;
     }
 
+    __device__ void translate_camera(float x, float y, float z){
+        this->look_from.e[0] += x;
+        this->look_from.e[1] += y;
+        this->look_from.e[2] += z;
+    }
+
+    // Simple x-axis matrix rotation
+    // [cos(theta), -sin(theta), 0] [x]
+    // [sin(theta),  cos(theta), 0] [y]
+    // [0,           0,          1] [z]
+    __device__ void rotate_camera_x(float new_x_angle){
+        // Compute angle delta
+        float d_angle = new_x_angle - this->angles.x();
+        float d_rads = degrees_to_rads(d_angle);
+
+        float new_x = this->look_from.x()*cos(d_rads) - this->look_from.y()*sin(d_rads);
+        float new_y = this->look_from.x()*sin(d_rads) + this->look_from.y()*cos(d_rads);
+        float new_z = this->look_from.z();
+
+        this->look_from = point3(new_x, new_y, new_z);
+        this->angles.e[0] = new_x_angle;
+
+    }
+
     // Simple y-axis matrix rotation
     // [cos(theta),  0, sin(theta)] [x]
     // [0,           1,          0] [y]
     // [-sin(theta), 0, cos(theta)] [z]
-    __device__ void rotate_camera_y(float new_angle){
+    __device__ void rotate_camera_y(float new_y_angle){
         // Compute angle delta
-        float d_angle = new_angle - this->angle;
+        float d_angle = new_y_angle - this->angles.y();
         float d_rads = degrees_to_rads(d_angle);
 
         float new_x = this->look_from.x()*cos(d_rads) + this->look_from.z()*sin(d_rads);
@@ -90,9 +96,25 @@ public:
         float new_z = this->look_from.z()*cos(d_rads) - this->look_from.x()*sin(d_rads);
 
         this->look_from = point3(new_x, new_y, new_z);
-        this->angle = new_angle;
+        this->angles.e[1] = new_y_angle;
 
-        compute_camera_scene();
+    }
+
+    // Simple z-axis matrix rotation
+    // [1,           0,          0] [x]
+    // [0, cos(theta), -sin(theta)] [y]
+    // [0, sin(theta),  cos(theta)] [z]
+    __device__ void rotate_camera_z(float new_z_angle){
+        // Compute angle delta
+        float d_angle = new_z_angle - this->angles.z();
+        float d_rads = degrees_to_rads(d_angle);
+
+        float new_x = this->look_from.x();
+        float new_y = this->look_from.y()*cos(d_rads) - this->look_from.z()*sin(d_rads);
+        float new_z = this->look_from.y()*sin(d_rads) + this->look_from.z()*cos(d_rads);
+
+        this->look_from = point3(new_x, new_y, new_z);
+        this->angles.e[2] = new_z_angle;
 
     }
 

@@ -40,7 +40,7 @@ __global__ void create_world(sceneobject **d_list, sceneobject **d_world, camera
 
         // Big balls
         d_list[i++] = new sphere(vec3(0,1,0), 1.0, new dielectric(1.5));
-        d_list[i++] = new sphere(vec3(-4,1,0), 1.0, new lambertian(vec3(0.4,0.2,0.1)));
+        d_list[i++] = new sphere(vec3(-4,1,0), 1.0, new lambertian(vec3(0.14,0.5,0.746)));
         d_list[i++] = new sphere(vec3(4,1,0), 1.0, new metal(vec3(0.7,0.6,0.5), 0.0));
 
         // Remaining balls
@@ -72,7 +72,7 @@ __global__ void create_world(sceneobject **d_list, sceneobject **d_world, camera
         float dist_to_focus = 10.0f;
         float aperture = 0.1f;
 
-        *d_camera = new camera(lookfrom, lookat, 0.0, vec3(0,1,0), 30.0, aspect_ratio, aperture, dist_to_focus);
+        *d_camera = new camera(lookfrom, lookat, vec3(0,0,0), vec3(0,1,0), 30.0, aspect_ratio, aperture, dist_to_focus);
     }
 }
 
@@ -91,9 +91,67 @@ __global__ void init_world(curandState *rand_state, int seed = clock()) {
     }
 }
 
-__global__ void update_scene(camera **d_camera, float new_camera_angle) {
+__device__ void rotate_scene(camera **d_camera, float new_x_angle, float new_y_angle, float new_z_angle) {
+    // Rotations
+    if (new_x_angle != (*d_camera)->angles.x()){
+        (*d_camera)->rotate_camera_x(new_x_angle);
+    }
+    if (new_y_angle != (*d_camera)->angles.y()){
+        (*d_camera)->rotate_camera_y(new_y_angle);
+    }
+    if (new_z_angle != (*d_camera)->angles.z()){
+        (*d_camera)->rotate_camera_z(new_z_angle);
+    }
+}
+
+#define PRNT_LOCATION (printf("Frame = %d, x_p = %.6f, y_p = %.6f, z_p = %.6f, x_a %.6f, y_a = %.6f, z_a = %.6f \n", \
+frame,(*d_camera)->look_from.x(),(*d_camera)->look_from.y(),(*d_camera)->look_from.z(),(*d_camera)->angles.x(),(*d_camera)->angles.y(),(*d_camera)->angles.z()));
+
+__global__ void update_scene(camera **d_camera, int frame) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        (*d_camera)->rotate_camera_y(new_camera_angle);
+
+        // Scene Example #1
+     /* if (frame == 0){
+            PRNT_LOCATION
+        }
+        else if (frame < 180) {
+            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.25f, (*d_camera)->angles.z());
+            if (frame == 179) {
+                PRNT_LOCATION
+            }
+        }
+        else if (frame < 360) {
+            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
+            (*d_camera)->translate_camera(-0.05,0.05,0.0);
+            if (frame == 359) {
+                PRNT_LOCATION
+            }
+        }
+        else if (frame < 480) {
+            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 1.0f, (*d_camera)->angles.z());
+
+            if (frame == 479) {
+                PRNT_LOCATION
+            }
+        }
+        else if (frame < 630) {
+            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
+            (*d_camera)->translate_camera(0.0,-0.05,0.05);
+
+            if (frame == 629) {
+                PRNT_LOCATION
+            }
+        }
+        else if (frame < 720) {
+            (*d_camera)->translate_camera(0.0,0.00,0.05);
+
+            if (frame == 719) {
+                PRNT_LOCATION
+            }
+        }*/
+
+        (*d_camera)->compute_camera_scene();
+
     }
 }
 
@@ -195,12 +253,15 @@ int main(void) {
     const int image_width = 1920;
     //const int image_width = 400;
     const int image_height = static_cast<int>(image_width / aspect_ratio);
-    const int num_samples = 10;
-    const int ray_bounce_limit = 50;
+    const int ray_bounce_limit = 10;
+    int num_samples = 20;
 
     const int num_pixels = image_width * image_height;
 
     int num_objects = 22*22+1+3;
+
+    int num_images = 2;
+
     //int seed = 42069;
 
     // Init rand state
@@ -216,8 +277,6 @@ int main(void) {
     init_world<<<1,1>>>(d_rand_state_world);
     gpuErrchk(cudaGetLastError());
     gpuErrchk(cudaDeviceSynchronize());
-
-    //init_objects<<<1,1>>>(d_rand_state_objects, seed);
 
 
     // Camera
@@ -247,8 +306,6 @@ int main(void) {
     dim3 blocks(image_width / thread_x + 1, image_height / thread_y + 1);
     dim3 threads(thread_x, thread_y);
 
-    int num_images = 90;
-
     std::cerr << "Rendering " << num_images << " " << image_width << "x" << image_height << " images ";
     std::cerr << "in " << thread_x << "x" << thread_y << " blocks.\n";
 
@@ -259,10 +316,25 @@ int main(void) {
 
     size_t fb_size = num_pixels * sizeof(vec3);
 
+    // Generate low-high samples of each image
+    for(int i = 0; i < num_images; i++) {
 
-    for(int i = 0; i < num_images; i++){
-        std::cerr << "Rendering image " << i << "/" << num_images << "\n";
-        // Init Image buffer
+        string image_name;
+
+        if (i % 2 == 0) {
+            std::cerr << "Rendering low image " << i << "/" << num_images << "\n";
+            update_scene<<<1,1>>>(d_camera, i);
+            gpuErrchk(cudaGetLastError());
+            gpuErrchk(cudaDeviceSynchronize());
+
+            num_samples = 1;
+            image_name = "output/ppm_images/image_" + std::to_string(i) + "_low" + ".ppm";
+        } else {
+            std::cerr << "Rendering high image " << i << "/" << num_images << "\n";
+            num_samples = 10;
+            image_name = "output/ppm_images/image_" + std::to_string(i - 1) + "_high" + ".ppm";
+        }
+
         vec3 *fb;
         gpuErrchk(cudaMallocManaged((void **) &fb, fb_size));
 
@@ -272,9 +344,28 @@ int main(void) {
         gpuErrchk(cudaGetLastError());
         gpuErrchk(cudaDeviceSynchronize());
 
+        output_image(image_width, image_height, fb, image_name);
+
+        // Free old buffer
+        gpuErrchk(cudaFree(fb));
+    }
+
+
+    // Generate continuous motion render
+/*    for(int i = 0; i < num_images; i++){
+        std::cerr << "Rendering image " << i << "/" << num_images << "\n";
+        // Init Image buffer
+        vec3 *fb;
+        gpuErrchk(cudaMallocManaged((void **) &fb, fb_size));
 
         // Update scene
-        update_scene<<<1,1>>>(d_camera, 1.0f * (i + 1));
+        update_scene<<<1,1>>>(d_camera, i);
+        gpuErrchk(cudaGetLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+
+        // Render world
+        render<<<blocks, threads>>>(fb, image_width, image_height, num_samples, d_camera, d_world, d_rand_state,
+                                    ray_bounce_limit);
         gpuErrchk(cudaGetLastError());
         gpuErrchk(cudaDeviceSynchronize());
 
@@ -285,15 +376,11 @@ int main(void) {
         // Free old buffer
         gpuErrchk(cudaFree(fb));
 
-    }
+    }*/
 
     stop = clock();
     double timer_seconds = ((double) (stop - start)) / CLOCKS_PER_SEC;
     std::cerr << "took " << timer_seconds << " seconds.\n";
-
-    // Output image
-    //output_image(image_width, image_height, fb, "output/ppm_images/image_1.ppm");
-
 
     // Free up
     gpuErrchk(cudaDeviceSynchronize());
