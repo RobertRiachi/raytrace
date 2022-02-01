@@ -4,6 +4,8 @@
 #include <cmath>
 #include <iostream>
 
+#include "utils.h"
+
 class vec3 {
     public:
 
@@ -19,6 +21,9 @@ class vec3 {
             return e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
         }
         __host__ __device__ float length() const {return sqrt(length_squared());}
+
+        __host__ __device__ float operator[](int i) const {return e[i]; }
+        __host__ __device__ float& operator[](int i) {return e[i]; }
 
         __host__ __device__ vec3& operator+=(const vec3 &v) {
             e[0] += v.e[0];
@@ -120,6 +125,9 @@ __device__ vec3 random_in_unit_disk(curandState *local_rand_state) {
         p = 2.0f*vec3(curand_uniform(local_rand_state), curand_uniform(local_rand_state), 0) - vec3(1,1,0);
     }
     return p;
+/*    auto r = curand_uniform(local_rand_state);
+    auto th = curand_uniform(local_rand_state) * 2 * pi;
+    return vec3(r * cos(th), r * sin(th), 0);*/
 }
 
 __device__ vec3 random_in_hemisphere(const vec3 &normal, curandState *local_rand_state) {

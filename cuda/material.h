@@ -5,24 +5,27 @@
 #include "ray.h"
 #include "sceneobject.h"
 #include "vec3.h"
+#include "texture.h"
 
 struct hit_record;
 
 class material {
     public:
+        __device__ virtual color emitted(float u, float v, const point3& p) const { return color(0,0,0); }
         __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered, curandState *local_rand_state) const = 0;
 };
 
 class lambertian : public material {
     public:
-        color albedo;
+        custom_texture* albedo;
 
-        __device__ lambertian(const color& a): albedo(a) {}
+        __device__ lambertian(const color& a) : albedo(new rgb_color(a)) {}
+        __device__ lambertian(custom_texture *a): albedo(a) {}
 
         __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered, curandState *local_rand_state) const override {
                 auto scatter_direction = rec.normal + random_in_unit_sphere(local_rand_state);
                 scattered = ray(rec.p, scatter_direction);
-                attenuation = albedo;
+                attenuation = albedo->value(rec.u, rec.v, rec.p);
                 return true;
             }
 };
@@ -80,4 +83,23 @@ class dielectric : public material {
 
         }
 };
+
+class diffuse_light : public material {
+    public:
+        custom_texture *emit;
+
+        __device__ diffuse_light(custom_texture *a) : emit(a) {}
+
+        __device__ diffuse_light(color c) : emit(new rgb_color(c)) {}
+
+        __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray&  scattered, curandState *local_rand_state) const override {
+            return false;
+        }
+
+        __device__ virtual color emitted(float u, float v, const point3& p) const override {
+            return emit->value(u,v,p);
+        }
+
+};
+
 #endif
