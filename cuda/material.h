@@ -30,6 +30,22 @@ class lambertian : public material {
             }
 };
 
+class lambertian_bg : public material {
+public:
+    custom_texture* albedo;
+
+    __device__ lambertian_bg(const color& a) : albedo(new rgb_color(a)) {}
+    __device__ lambertian_bg(custom_texture *a): albedo(a) {}
+
+    __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered, curandState *local_rand_state) const override {
+        return false;
+    }
+
+    __device__ virtual color emitted(float u, float v, const point3& p) const override {
+        return albedo->value(u, v, p);
+    }
+};
+
 class metal : public material {
     public:
         color albedo;

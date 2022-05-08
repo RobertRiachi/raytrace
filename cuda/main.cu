@@ -16,6 +16,8 @@
 #include "camera.h"
 #include "material.h"
 #include "load_stb_image.h"
+#include "bvh.h"
+#include "rect.h"
 
 using namespace std;
 
@@ -39,9 +41,20 @@ __global__ void create_world(sceneobject **d_list,
                              camera **d_camera,
                              float aspect_ratio,
                              curandState *rand_state,
+                             textureWrap earth_texture,
+                             textureWrap mars_texture,
+                             textureWrap sky_back_texture,
+                             textureWrap sky_bottom_texture,
+                             textureWrap sky_left_texture,
+                             textureWrap sky_front_texture,
+                             textureWrap sky_top_texture,
+                             textureWrap sky_right_texture,
                              int num_objects,
-                             textureWrap sky_texture,
-                             textureWrap earth_texture) {
+                             sceneobject** d_boxes,
+                             int num_boxes,
+                             sceneobject** d_sky_box,
+                             int num_sky_box) {
+
 
     if (threadIdx.x == 0 && blockIdx.x == 0) {
 
@@ -50,12 +63,25 @@ __global__ void create_world(sceneobject **d_list,
         // Set ground
         auto checker = new checker_texture(color(0.2, 0.3, 0.1), color(0.9,0.9,0.9));
         auto ground_color = new rgb_color(color(0.1, 0.1, 0.1));
-        auto sky = new image_texture(sky_texture.width, sky_texture.height, sky_texture.textObj);
+        auto light = new diffuse_light(color(7, 7, 7));
         auto earth = new image_texture(earth_texture.width, earth_texture.height, earth_texture.textObj);
+        auto sunset = new image_texture(mars_texture.width, mars_texture.height, mars_texture.textObj);
 
-        d_list[0] = new sphere(vec3(0, -1000.0, 0), 1000.0, new lambertian(ground_color));
+        // neg_x = back, neg_z = left, neg_y = bottom, pos_x = front, pos_y = top, pos_z = right
+        auto sky_back = new image_texture(sky_back_texture.width, sky_back_texture.height, sky_back_texture.textObj);
+        auto sky_bottom = new image_texture(sky_bottom_texture.width, sky_bottom_texture.height, sky_bottom_texture.textObj);
+        auto sky_left = new image_texture(sky_left_texture.width, sky_left_texture.height, sky_left_texture.textObj);
+        auto sky_front = new image_texture(sky_front_texture.width, sky_front_texture.height, sky_front_texture.textObj);
+        auto sky_top = new image_texture(sky_top_texture.width, sky_top_texture.height, sky_top_texture.textObj);
+        auto sky_right = new image_texture(sky_right_texture.width, sky_right_texture.height, sky_right_texture.textObj);
 
-        int i = 1;
+        auto white = new lambertian(color(.73, .73, .73));
+        auto red = new lambertian(color(.65, .05, .05));
+        auto green = new lambertian(color(.12, .45, .15));
+
+        int i = 0;
+
+        //d_list[i++] = new sphere(vec3(0, -1000.0, 0), 1000.0, new lambertian(ground_color));
 
         float main_x = RND_IN_RANGE(-4.0, 4.0);
         float main_z = RND_IN_RANGE(-4.0, 4.0);
@@ -63,20 +89,31 @@ __global__ void create_world(sceneobject **d_list,
         float z_buffer = 1.0;
 
         // Big balls
-        d_list[i++] = new sphere(vec3(0,1,0), 1.0, new dielectric(1.5));
-        d_list[i++] = new sphere(vec3(RND_IN_RANGE(-4.0, 4.0),1,RND_IN_RANGE(-4.0, 4.0)), 1.0, new lambertian(earth));
-        d_list[i++] = new sphere(vec3(RND_IN_RANGE(-4.0, 4.0),1,RND_IN_RANGE(-4.0, 4.0)), 1.0, new metal(vec3(0.7,0.6,0.5), 0.0));
+        //d_list[i++] = new sphere(vec3(0,1,0), 1.0, new dielectric(1.5));
+        //d_list[i++] = new sphere(vec3(RND_IN_RANGE(-4.0, 4.0),1,RND_IN_RANGE(-4.0, 4.0)), 1.0, new lambertian(earth));
+        //d_list[i++] = new sphere(vec3(RND_IN_RANGE(-4.0, 4.0),1,RND_IN_RANGE(-4.0, 4.0)), 1.0, new metal(vec3(0.7,0.6,0.5), 0.0));
 
-        // Subtract ground and large spheres
-        int num_small_balls = num_objects - 4;
+        d_list[i++] = new sphere(vec3(200,278,400), 30.0, new dielectric(1.5));
+        d_list[i++] = new sphere(vec3(100,278,350), 30.0, new metal(vec3(0.7,0.6,0.5), 0.0));
+        d_list[i++] = new sphere(vec3(250,278,500), 30.0, new lambertian(earth));
+
+        //sunset
+        d_list[i++] = new sphere(vec3(230,263,300), 15.0, new lambertian(sunset));
+
+        //small metal
+        d_list[i++] = new sphere(vec3(300,263,400), 15.0, new metal(vec3(0.96,0.25,0.25), 0.15));
+
+        // Old Scene
+        //Subtract large spheres, skybox and light
+/*        int num_small_balls = num_objects - 12;
 
         for (int nb = 0; nb < num_small_balls; nb++) {
             float choose_material = RND_UNIFORM;
-            float sphere_size = RND_IN_RANGE(0.1,0.35);
-            float x = RND_IN_RANGE(-12,12) + main_x + x_buffer;
-            float z = RND_IN_RANGE(-12,12) + main_z + z_buffer;
+            float sphere_size = RND_IN_RANGE(5.0,10.0);
+            float x = RND_IN_RANGE(50,400) + main_x + x_buffer;
+            float z = RND_IN_RANGE(250,550) + main_z + z_buffer;
 
-            vec3 center(x, sphere_size, z);
+            vec3 center(x, 248 + sphere_size, z);
 
             if (choose_material < 0.8f) {
                 d_list[i++] = new sphere(center, sphere_size,
@@ -87,38 +124,48 @@ __global__ void create_world(sceneobject **d_list,
             } else {
                 d_list[i++] = new sphere(center, sphere_size, new dielectric(1.5));
             }
+        }*/
+
+        // bvh cluster
+        for (int j = 0; j < num_boxes; j++ ){
+            auto x_tmp = RND_IN_RANGE(200,250);
+            auto y_tmp = RND_IN_RANGE(310,360);
+            auto z_tmp = RND_IN_RANGE(400,450);
+            d_boxes[j] = new sphere(point3(x_tmp, y_tmp, z_tmp), 5.0f, white);
         }
 
-/*        // Remaining balls
-        for (int a = -11; a < 11; a++ ) {
-            for (int b = -11; b < 11; b++) {
+        //sceneobject boxes = new sceneobject_list(d_boxes, num_boxes)
+        auto boxes = sceneobject_list(d_boxes, num_boxes);
+        auto d_bvh = new bvh_node(boxes, rand_state);
+        d_list[i++] = d_bvh;
 
-                float choose_material = RND_UNIFORM;
-                vec3 center(a + RND_UNIFORM, 0.2, b + RND_UNIFORM);
+        //Skybox
+        float box_dist = 555;
 
-                if (choose_material < 0.8f) {
-                    d_list[i++] = new sphere(center, 0.2,
-                                             new lambertian(vec3(RND_UNIFORM*RND_UNIFORM, RND_UNIFORM*RND_UNIFORM, RND_UNIFORM*RND_UNIFORM)));
-                } else if (choose_material < 0.95f) {
-                    d_list[i++] = new sphere(center, 0.2,
-                                             new metal(vec3(0.5f*(1.0f+RND_UNIFORM), 0.5f*(1.0f+RND_UNIFORM), 0.5f*(1.0f+RND_UNIFORM)), 0.5f*RND_UNIFORM));
-                } else {
-                    d_list[i++] = new sphere(center, 0.2, new dielectric(1.5));
-                }
-
-            }
-        }*/
+        d_list[i++] = new yz_rect(0, box_dist, 0, box_dist, box_dist, new lambertian_bg(sky_left));
+        d_list[i++] = new yz_rect(0, box_dist, 0, box_dist, 0,  new lambertian_bg(sky_right));
+        d_list[i++] = new xz_rect(75, 270, 76, 280, 554, light);
+        d_list[i++] = new xz_rect(0, box_dist, 0, box_dist, 0, new lambertian_bg(sky_bottom));
+        d_list[i++] = new xz_rect(0, box_dist, 0, box_dist, box_dist, new lambertian_bg(sky_top));
+        d_list[i++] = new xy_rect(0, box_dist, 0, box_dist, box_dist, new lambertian_bg(sky_front));
+        d_list[i++] = new xy_rect(0, box_dist, 0, box_dist, 0, new lambertian_bg(sky_back));
 
         *rand_state = local_rand_state;
         *d_world = new sceneobject_list(d_list, num_objects);
 
-        //Camera
-        point3 lookfrom(13,2,5);
-        point3 lookat(0,0,0);
+        // Old Camera
+        /*point3 lookfrom(278,278,278);
+        point3 lookat(0,278,555);
         float dist_to_focus = 10.0f;
-        float aperture = 0.1f;
+        float aperture = 0.0f;*/
 
-        *d_camera = new camera(lookfrom, lookat, vec3(0,0,0), vec3(0,1,0), 30.0, aspect_ratio, aperture, dist_to_focus);
+        //point3 lookfrom(350,278,100);
+        point3 lookfrom(450,278,200);
+        point3 lookat(0,278,555);
+        float dist_to_focus = 10.0f;
+        float aperture = 0.0f;
+
+        *d_camera = new camera(lookfrom, lookat, vec3(0,0,0), vec3(0,1,0), 40.0, aspect_ratio, aperture, dist_to_focus);
     }
 }
 
@@ -211,8 +258,8 @@ __global__ void init_render(int max_x, int max_y, curandState *rand_state, int s
     curand_init(seed + pixel_idx, 0, 0, &rand_state[pixel_idx]);
 }
 
-__device__ color ray_color(const ray &r, sceneobject **world, curandState *local_rand_state, int ray_bounce_limit, float u, float v, textureWrap sky_texture) {
-    color background = color(1, 0, 0);
+__device__ color ray_color(const ray &r, sceneobject **world, curandState *local_rand_state, int ray_bounce_limit, float u, float v) {
+    color background = color(255.0, 255.0, 255.0);
 
     ray cur_ray = r;
     vec3 cur_attenuation = vec3(1.0,1.0,1.0);
@@ -223,28 +270,33 @@ __device__ color ray_color(const ray &r, sceneobject **world, curandState *local
             vec3 attenuation;
             vec3 emitted = rec.mat_ptr->emitted(rec.u, rec.v, rec.p);
             if (rec.mat_ptr->scatter(cur_ray, rec, attenuation, scattered, local_rand_state)) {
-                cur_attenuation *= (attenuation + emitted);
+                cur_attenuation *= attenuation;
+                cur_attenuation += emitted;
                 cur_ray = scattered;
             } else {
-                return emitted;
+                return cur_attenuation * emitted;
             }
+
         }
         else {
             vec3 unit_direction = unit_vector(cur_ray.direction());
             float t = 0.5f*(unit_direction.y() + 1.0f);
-            image_texture d_text(sky_texture.width, sky_texture.height, sky_texture.textObj);
+            //image_texture d_text(sky_texture.width, sky_texture.height, sky_texture.textObj);
             vec3 c = (1.0f-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
-            return cur_attenuation * c;
+            return cur_attenuation;
+
+            //return cur_attenuation * background;
+
             //image_texture d_text(sky_texture.width, sky_texture.height, sky_texture.textObj);
             //return cur_attenuation * d_text.value(u, v, vec3(0,0,0));
             //return cur_attenuation * background;
         }
     }
-    return color(0.0,0.0,0.0); // exceeded recursion
+    return cur_attenuation; // exceeded recursion
 }
 
 __global__ void render(vec3 *fb, int max_x, int max_y, int num_samples, camera **cam, sceneobject **world, curandState *rand_state,
-       int ray_bounce_limit, textureWrap sky_texture, textureWrap earth_texture) {
+       int ray_bounce_limit, textureWrap earth_texture, textureWrap mars_texture) {
     int idx_x = blockIdx.x * blockDim.x + threadIdx.x;
     int idx_y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -259,7 +311,7 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int num_samples, camera *
         float u = float(idx_x + curand_uniform(&local_rand_state)) / float(max_x);
         float v = float(idx_y + curand_uniform(&local_rand_state)) / float(max_y);
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
-        col += ray_color(r, world, &local_rand_state, ray_bounce_limit, u, v, sky_texture);
+        col += ray_color(r, world, &local_rand_state, ray_bounce_limit, u, v);
     }
     rand_state[pixel_idx] = local_rand_state;
     col /= float(num_samples);
@@ -356,14 +408,18 @@ int main(void) {
     // Image
     const float aspect_ratio = 16.0 / 9.0;
     const int image_width = 1920;
-    //const int image_width = 400;
     const int image_height = static_cast<int>(image_width / aspect_ratio);
-    const int ray_bounce_limit = 10;
-    int num_samples = 20;
+    const int ray_bounce_limit = 25;
+    int low_num_samples = 1;
+    int high_num_samples = 20;
+    int num_boxes = 1000;
+
+    size_t stack_size = 2048;
+    cudaThreadSetLimit(cudaLimitStackSize, stack_size); // set stack size
 
     const int num_pixels = image_width * image_height;
 
-    int num_objects = 22*22+1+3;
+    int num_objects = 13;//13 before small balls;
 
     int num_images = 2;
 
@@ -403,7 +459,23 @@ int main(void) {
     gpuErrchk(cudaMalloc((void **) &d_world, sizeof(sceneobject *)));
 
     textureWrap earth_texture = load_texture("textures/earthmap.jpg");
-    textureWrap sky_texture = load_texture("textures/sunset2.jpg");
+    textureWrap mars_texture = load_texture("textures/mars.jpg");
+
+    textureWrap sky_back = load_texture("textures/skybox/back.jpg");
+    textureWrap sky_bottom = load_texture("textures/skybox/bottom.jpg");
+    textureWrap sky_left = load_texture("textures/skybox/left.jpg");
+    textureWrap sky_front = load_texture("textures/skybox/front.jpg");
+    textureWrap sky_top = load_texture("textures/skybox/top.jpg");
+    textureWrap sky_right = load_texture("textures/skybox/right.jpg");
+
+    // BVH
+    sceneobject **d_boxes;
+    gpuErrchk(cudaMalloc((void **) &d_boxes, num_boxes * sizeof(sceneobject *)));
+
+    // Skybox
+    sceneobject **d_sky_box;
+    int num_sky_box = 5;
+    gpuErrchk(cudaMalloc((void **) &d_sky_box, num_sky_box * sizeof(sceneobject *)));
 /*
     cudaResourceDesc resourceDesc{0};
     memset(&resourceDesc, 0, sizeof(resourceDesc));
@@ -411,7 +483,24 @@ int main(void) {
 
     std::cout << "Width recall = " << resourceDesc.res.pitch2D.width << "\n";*/
 
-    create_world<<<1, 1>>>(d_list, d_world, d_camera, aspect_ratio, d_rand_state_world, num_objects, sky_texture, earth_texture);
+    create_world<<<1, 1>>>(d_list,
+                           d_world,
+                           d_camera,
+                           aspect_ratio,
+                           d_rand_state_world,
+                           earth_texture,
+                           mars_texture,
+                           sky_back,
+                           sky_bottom,
+                           sky_left,
+                           sky_front,
+                           sky_top,
+                           sky_right,
+                           num_objects,
+                           d_boxes,
+                           num_boxes,
+                           d_sky_box,
+                           num_sky_box);
     gpuErrchk(cudaGetLastError());
     gpuErrchk(cudaDeviceSynchronize());
 
@@ -428,7 +517,7 @@ int main(void) {
 
 
     size_t fb_size = num_pixels * sizeof(vec3);
-
+    int curr_samples;
     // Generate low-high samples of each image
     for(int i = 0; i < num_images; i++) {
 
@@ -440,11 +529,11 @@ int main(void) {
             gpuErrchk(cudaGetLastError());
             gpuErrchk(cudaDeviceSynchronize());
 
-            num_samples = 1;
+            curr_samples = low_num_samples;
             image_name = "output/ppm_images/image_" + std::to_string(i) + "_low" + ".ppm";
         } else {
             std::cerr << "Rendering high image " << i << "/" << num_images << "\n";
-            num_samples = 20;
+            curr_samples = high_num_samples;
             image_name = "output/ppm_images/image_" + std::to_string(i - 1) + "_high" + ".ppm";
         }
 
@@ -452,8 +541,8 @@ int main(void) {
         gpuErrchk(cudaMallocManaged((void **) &fb, fb_size));
 
         // Render world
-        render<<<blocks, threads>>>(fb, image_width, image_height, num_samples, d_camera, d_world, d_rand_state,
-                                    ray_bounce_limit, sky_texture, earth_texture);
+        render<<<blocks, threads>>>(fb, image_width, image_height, curr_samples, d_camera, d_world, d_rand_state,
+                                    ray_bounce_limit, earth_texture, mars_texture);
         gpuErrchk(cudaGetLastError());
         gpuErrchk(cudaDeviceSynchronize());
 
@@ -497,13 +586,23 @@ int main(void) {
 
     // Free up
     gpuErrchk(cudaDeviceSynchronize());
-    free_world<<<1, 1>>>(d_list, d_world, d_camera, num_objects);
+    //free_world<<<1, 1>>>(d_list, d_world, d_camera, num_objects);
+    gpuErrchk(cudaGetLastError());
+    gpuErrchk(cudaDeviceSynchronize());
 
     // Destroy texture object
-    cudaDestroyTextureObject(sky_texture.textObj);
+    cudaDestroyTextureObject(sky_back.textObj);
+    cudaDestroyTextureObject(sky_bottom.textObj);
+    cudaDestroyTextureObject(sky_left.textObj);
+    cudaDestroyTextureObject(sky_front.textObj);
+    cudaDestroyTextureObject(sky_top.textObj);
+    cudaDestroyTextureObject(sky_right.textObj);
+    cudaDestroyTextureObject(mars_texture.textObj);
     cudaDestroyTextureObject(earth_texture.textObj);
 
     gpuErrchk(cudaGetLastError());
+    gpuErrchk(cudaFree(d_sky_box));
+    gpuErrchk(cudaFree(d_boxes));
     gpuErrchk(cudaFree(d_world));
     gpuErrchk(cudaFree(d_list));
     gpuErrchk(cudaFree(d_camera));

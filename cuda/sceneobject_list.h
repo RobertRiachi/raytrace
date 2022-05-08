@@ -27,7 +27,7 @@ __device__ bool sceneobject_list::get_bounding_box(bounding_box &output_box) con
     bool first_box = true;
 
     for(int i = 0; i < list_size; i++) {
-        if (!list[i]->get_bounding_box(temp_box)) return false;
+        if (!this->list[i]->get_bounding_box(temp_box)) return false;
 
         output_box = first_box ? temp_box : surrounding_box(output_box, temp_box);
         first_box = false;
@@ -47,6 +47,7 @@ __device__ bool sceneobject_list::hit(const ray& r, float t_min, float t_max, hi
             hit_anything = true;
             closest_so_far = temp_rec.t;
             rec = temp_rec;
+
         }
     }
     return hit_anything;

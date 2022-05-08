@@ -12,7 +12,7 @@ class sphere: public sceneobject {
         float radius;
         material *mat_ptr;
 
-        __device__ sphere() {}
+    __device__ sphere() {}
         __device__ sphere(point3 cen, float r, material *m): center(cen), radius(r), mat_ptr(m) {};
         __device__ virtual bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const override;
         __device__ virtual bool get_bounding_box(bounding_box& output_box) const override;

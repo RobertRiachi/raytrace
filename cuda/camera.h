@@ -6,8 +6,6 @@
 #include "utils.h"
 
 
-__device__ inline float degrees_to_rads(float degree) { return degree * pi / 180.0f; }
-
 class camera {
 public:
 
