@@ -43,6 +43,7 @@ __global__ void create_world(sceneobject **d_list,
                              curandState *rand_state,
                              textureWrap earth_texture,
                              textureWrap mars_texture,
+                             textureWrap sunset_texture,
                              textureWrap sky_back_texture,
                              textureWrap sky_bottom_texture,
                              textureWrap sky_left_texture,
@@ -65,7 +66,9 @@ __global__ void create_world(sceneobject **d_list,
         auto ground_color = new rgb_color(color(0.1, 0.1, 0.1));
         auto light = new diffuse_light(color(7, 7, 7));
         auto earth = new image_texture(earth_texture.width, earth_texture.height, earth_texture.textObj);
-        auto sunset = new image_texture(mars_texture.width, mars_texture.height, mars_texture.textObj);
+        auto mars = new image_texture(mars_texture.width, mars_texture.height, mars_texture.textObj);
+        auto sunset = new image_texture(sunset_texture.width, sunset_texture.height, sunset_texture.textObj);
+
 
         // neg_x = back, neg_z = left, neg_y = bottom, pos_x = front, pos_y = top, pos_z = right
         auto sky_back = new image_texture(sky_back_texture.width, sky_back_texture.height, sky_back_texture.textObj);
@@ -97,15 +100,44 @@ __global__ void create_world(sceneobject **d_list,
         d_list[i++] = new sphere(vec3(100,278,350), 30.0, new metal(vec3(0.7,0.6,0.5), 0.0));
         d_list[i++] = new sphere(vec3(250,278,500), 30.0, new lambertian(earth));
 
-        //sunset
-        d_list[i++] = new sphere(vec3(230,263,300), 15.0, new lambertian(sunset));
+        //mars
+        d_list[i++] = new sphere(vec3(230,263,300), 15.0, new lambertian(mars));
 
         //small metal
         d_list[i++] = new sphere(vec3(300,263,400), 15.0, new metal(vec3(0.96,0.25,0.25), 0.15));
 
-        // Old Scene
-        //Subtract large spheres, skybox and light
-/*        int num_small_balls = num_objects - 12;
+        //behind glass
+        //d_list[i++] = new sphere(vec3(80,278,500), 30.0, new lambertian(sunset));
+        // Ontop of box
+        d_list[i++] = new sphere(vec3(100,315,405), 15.0, new lambertian(sunset));
+
+        // bvh cluster
+        for (int j = 0; j < num_boxes; j++ ){
+            auto x_tmp = RND_IN_RANGE(200,250);
+            auto y_tmp = RND_IN_RANGE(310,360);
+            auto z_tmp = RND_IN_RANGE(400,450);
+            d_boxes[j] = new sphere(point3(x_tmp, y_tmp, z_tmp), 5.0f, white);
+        }
+
+        auto boxes = sceneobject_list(d_boxes, num_boxes);
+        auto d_bvh = new bvh_node(boxes, rand_state);
+        d_list[i++] = d_bvh;
+
+        // Box point3(130, 0, 65), point3(295, 165, 230)
+        point3 p0(90, 248, 395);
+        point3 p1(110, 300, 415);
+
+        d_list[i++] = new xy_rect(p0.x(), p1.x(), p0.y(), p1.y(), p1.z(), green);
+        d_list[i++] = new xy_rect(p0.x(), p1.x(), p0.y(), p1.y(), p0.z(), red);
+
+        d_list[i++] = new xz_rect(p0.x(), p1.x(), p0.z(), p1.z(), p1.y(), green);
+        d_list[i++] = new xz_rect(p0.x(), p1.x(), p0.z(), p1.z(), p0.y(), red);
+
+        d_list[i++] = new yz_rect(p0.y(), p1.y(), p0.z(), p1.z(), p1.x(), green);
+        d_list[i++] = new yz_rect(p0.y(), p1.y(), p0.z(), p1.z(), p0.x(), red);
+
+        //Subtract large spheres, skybox and light, cube
+        int num_small_balls = num_objects - 19;
 
         for (int nb = 0; nb < num_small_balls; nb++) {
             float choose_material = RND_UNIFORM;
@@ -124,20 +156,7 @@ __global__ void create_world(sceneobject **d_list,
             } else {
                 d_list[i++] = new sphere(center, sphere_size, new dielectric(1.5));
             }
-        }*/
-
-        // bvh cluster
-        for (int j = 0; j < num_boxes; j++ ){
-            auto x_tmp = RND_IN_RANGE(200,250);
-            auto y_tmp = RND_IN_RANGE(310,360);
-            auto z_tmp = RND_IN_RANGE(400,450);
-            d_boxes[j] = new sphere(point3(x_tmp, y_tmp, z_tmp), 5.0f, white);
         }
-
-        //sceneobject boxes = new sceneobject_list(d_boxes, num_boxes)
-        auto boxes = sceneobject_list(d_boxes, num_boxes);
-        auto d_bvh = new bvh_node(boxes, rand_state);
-        d_list[i++] = d_bvh;
 
         //Skybox
         float box_dist = 555;
@@ -202,44 +221,44 @@ __global__ void update_scene(camera **d_camera, int frame) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
 
         // Scene Example #1
-     /* if (frame == 0){
-            PRNT_LOCATION
-        }
-        else if (frame < 180) {
-            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.25f, (*d_camera)->angles.z());
-            if (frame == 179) {
-                PRNT_LOCATION
-            }
-        }
-        else if (frame < 360) {
-            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
-            (*d_camera)->translate_camera(-0.05,0.05,0.0);
-            if (frame == 359) {
-                PRNT_LOCATION
-            }
-        }
-        else if (frame < 480) {
-            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 1.0f, (*d_camera)->angles.z());
+        /* if (frame == 0){
+               PRNT_LOCATION
+           }
+           else if (frame < 180) {
+               rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.25f, (*d_camera)->angles.z());
+               if (frame == 179) {
+                   PRNT_LOCATION
+               }
+           }
+           else if (frame < 360) {
+               rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
+               (*d_camera)->translate_camera(-0.05,0.05,0.0);
+               if (frame == 359) {
+                   PRNT_LOCATION
+               }
+           }
+           else if (frame < 480) {
+               rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 1.0f, (*d_camera)->angles.z());
 
-            if (frame == 479) {
-                PRNT_LOCATION
-            }
-        }
-        else if (frame < 630) {
-            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
-            (*d_camera)->translate_camera(0.0,-0.05,0.05);
+               if (frame == 479) {
+                   PRNT_LOCATION
+               }
+           }
+           else if (frame < 630) {
+               rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
+               (*d_camera)->translate_camera(0.0,-0.05,0.05);
 
-            if (frame == 629) {
-                PRNT_LOCATION
-            }
-        }
-        else if (frame < 720) {
-            (*d_camera)->translate_camera(0.0,0.00,0.05);
+               if (frame == 629) {
+                   PRNT_LOCATION
+               }
+           }
+           else if (frame < 720) {
+               (*d_camera)->translate_camera(0.0,0.00,0.05);
 
-            if (frame == 719) {
-                PRNT_LOCATION
-            }
-        }*/
+               if (frame == 719) {
+                   PRNT_LOCATION
+               }
+           }*/
 
         (*d_camera)->compute_camera_scene();
 
@@ -296,7 +315,7 @@ __device__ color ray_color(const ray &r, sceneobject **world, curandState *local
 }
 
 __global__ void render(vec3 *fb, int max_x, int max_y, int num_samples, camera **cam, sceneobject **world, curandState *rand_state,
-       int ray_bounce_limit, textureWrap earth_texture, textureWrap mars_texture) {
+                       int ray_bounce_limit, textureWrap earth_texture, textureWrap mars_texture, textureWrap sunset_texture) {
     int idx_x = blockIdx.x * blockDim.x + threadIdx.x;
     int idx_y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -419,7 +438,7 @@ int main(void) {
 
     const int num_pixels = image_width * image_height;
 
-    int num_objects = 13;//13 before small balls;
+    int num_objects = 50;//12 before small balls;
 
     int num_images = 2;
 
@@ -460,6 +479,7 @@ int main(void) {
 
     textureWrap earth_texture = load_texture("textures/earthmap.jpg");
     textureWrap mars_texture = load_texture("textures/mars.jpg");
+    textureWrap sunset_texture = load_texture("textures/sunset.jpg");
 
     textureWrap sky_back = load_texture("textures/skybox/back.jpg");
     textureWrap sky_bottom = load_texture("textures/skybox/bottom.jpg");
@@ -490,6 +510,7 @@ int main(void) {
                            d_rand_state_world,
                            earth_texture,
                            mars_texture,
+                           sunset_texture,
                            sky_back,
                            sky_bottom,
                            sky_left,
@@ -525,7 +546,7 @@ int main(void) {
 
         if (i % 2 == 0) {
             std::cerr << "Rendering low image " << i << "/" << num_images << "\n";
-                        update_scene<<<1,1>>>(d_camera, i);
+            update_scene<<<1,1>>>(d_camera, i);
             gpuErrchk(cudaGetLastError());
             gpuErrchk(cudaDeviceSynchronize());
 
@@ -542,7 +563,7 @@ int main(void) {
 
         // Render world
         render<<<blocks, threads>>>(fb, image_width, image_height, curr_samples, d_camera, d_world, d_rand_state,
-                                    ray_bounce_limit, earth_texture, mars_texture);
+                                    ray_bounce_limit, earth_texture, mars_texture, sunset_texture);
         gpuErrchk(cudaGetLastError());
         gpuErrchk(cudaDeviceSynchronize());
 
@@ -597,6 +618,7 @@ int main(void) {
     cudaDestroyTextureObject(sky_front.textObj);
     cudaDestroyTextureObject(sky_top.textObj);
     cudaDestroyTextureObject(sky_right.textObj);
+    cudaDestroyTextureObject(sunset_texture.textObj);
     cudaDestroyTextureObject(mars_texture.textObj);
     cudaDestroyTextureObject(earth_texture.textObj);
 
