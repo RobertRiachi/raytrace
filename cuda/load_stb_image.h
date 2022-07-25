@@ -8,9 +8,9 @@
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
-#pragma diag_suppress = set_but_not_used
+#pragma nv_diag_suppress = set_but_not_used
 #include "stb_image.h"
-#pragma diag_default = set_but_not_used
+#pragma nv_diag_default = set_but_not_used
 
 // Restore warning levels.
 #ifdef _MSC_VER

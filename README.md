@@ -11,6 +11,8 @@ convert image_new.ppm image_new.png
 To compile use Nvidia's Cuda compiler, then chain with conversion script:
 ```
 nvcc -o a.out main.cu && ./a.out && python3 output/convert.py
+
+-arch=sm_75
 ```
 
 # Outputing Video

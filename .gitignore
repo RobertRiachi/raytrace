@@ -36,4 +36,4 @@ cuda/output/png_images
 cuda/output/ppm_images
 
 # Render
-cuda/output/render.mp4
+cuda/output/render_video.mp4

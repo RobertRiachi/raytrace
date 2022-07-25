@@ -221,44 +221,57 @@ __global__ void update_scene(camera **d_camera, int frame) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
 
         // Scene Example #1
-        /* if (frame == 0){
-               PRNT_LOCATION
-           }
-           else if (frame < 180) {
-               rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.25f, (*d_camera)->angles.z());
-               if (frame == 179) {
-                   PRNT_LOCATION
-               }
-           }
-           else if (frame < 360) {
-               rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
-               (*d_camera)->translate_camera(-0.05,0.05,0.0);
-               if (frame == 359) {
-                   PRNT_LOCATION
-               }
-           }
-           else if (frame < 480) {
-               rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 1.0f, (*d_camera)->angles.z());
+        if (frame == 0){
+            PRNT_LOCATION
+        }
+        else if (frame < 200) {
+            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.125f, (*d_camera)->angles.z());
+            if (frame == 199) {
+                PRNT_LOCATION
+            }
+        }
+        else if (frame < 400) {
+            rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() - 0.125f, (*d_camera)->angles.z());
+            if (frame == 399) {
+                PRNT_LOCATION
+            }
+        }
+        else if (frame < 500) {
+            rotate_scene(d_camera, (*d_camera)->angles.x() + 0.125f, (*d_camera)->angles.y(), (*d_camera)->angles.z());
+            (*d_camera)->translate_camera(-0.025,0.025,0.0);
+            if (frame == 499) {
+                PRNT_LOCATION
+            }
+        }
+        else if (frame < 600) {
+            rotate_scene(d_camera, (*d_camera)->angles.x() - 0.125f, (*d_camera)->angles.y(), (*d_camera)->angles.z());
+            (*d_camera)->translate_camera(0.025,-0.025,0.0);
+            if (frame == 599) {
+                PRNT_LOCATION
+            }
+        }
+        //    else if (frame < 480) {
+        //        rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 1.0f, (*d_camera)->angles.z());
 
-               if (frame == 479) {
-                   PRNT_LOCATION
-               }
-           }
-           else if (frame < 630) {
-               rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
-               (*d_camera)->translate_camera(0.0,-0.05,0.05);
+        //        if (frame == 479) {
+        //            PRNT_LOCATION
+        //        }
+        //    }
+        //    else if (frame < 630) {
+        //        rotate_scene(d_camera, (*d_camera)->angles.x(), (*d_camera)->angles.y() + 0.05f, (*d_camera)->angles.z());
+        //        (*d_camera)->translate_camera(0.0,-0.05,0.05);
 
-               if (frame == 629) {
-                   PRNT_LOCATION
-               }
-           }
-           else if (frame < 720) {
-               (*d_camera)->translate_camera(0.0,0.00,0.05);
+        //        if (frame == 629) {
+        //            PRNT_LOCATION
+        //        }
+        //    }
+        //    else if (frame < 720) {
+        //        (*d_camera)->translate_camera(0.0,0.00,0.05);
 
-               if (frame == 719) {
-                   PRNT_LOCATION
-               }
-           }*/
+        //        if (frame == 719) {
+        //            PRNT_LOCATION
+        //        }
+        //    }
 
         (*d_camera)->compute_camera_scene();
 
@@ -426,21 +439,22 @@ textureWrap load_texture(const char* filename) {
 int main(void) {
     // Image
     const float aspect_ratio = 16.0 / 9.0;
-    const int image_width = 1920;
+    const int image_width = 480;//1920;
     const int image_height = static_cast<int>(image_width / aspect_ratio);
     const int ray_bounce_limit = 25;
     int low_num_samples = 1;
     int high_num_samples = 20;
     int num_boxes = 1000;
 
-    size_t stack_size = 2048;
-    cudaThreadSetLimit(cudaLimitStackSize, stack_size); // set stack size
+    size_t stack_size = 4096;
+    cudaDeviceSetLimit(cudaLimitStackSize, stack_size); // set stack size
 
     const int num_pixels = image_width * image_height;
 
     int num_objects = 50;//12 before small balls;
 
-    int num_images = 2;
+    // This is total for low + high res so you'll have num_images//2 of each resolution
+    int num_images = 600 * 2;
 
     // 32x18 threads works best so far, logic is 32/(16/9) = 18 where 16/9 is our current aspect ratio
     int thread_x = 32;
@@ -545,18 +559,21 @@ int main(void) {
         string image_name="";
 
         if (i % 2 == 0) {
-            std::cerr << "Rendering low image " << i << "/" << num_images << "\n";
-            update_scene<<<1,1>>>(d_camera, i);
+            auto frame = (int) std::floor(i/2);
+            std::cerr << "Rendering low image " << frame << "/" << (int) std::floor(num_images/2) << "\n";
+            update_scene<<<1,1>>>(d_camera, frame);
             gpuErrchk(cudaGetLastError());
             gpuErrchk(cudaDeviceSynchronize());
 
             curr_samples = low_num_samples;
-            image_name = "output/ppm_images/image_" + std::to_string(i) + "_low" + ".ppm";
-        } else {
-            std::cerr << "Rendering high image " << i << "/" << num_images << "\n";
-            curr_samples = high_num_samples;
-            image_name = "output/ppm_images/image_" + std::to_string(i - 1) + "_high" + ".ppm";
-        }
+            image_name = "output/ppm_images/image_" + std::to_string(frame) + "_low" + ".ppm";
+        } 
+        // else {
+        //     auto frame = (int) std::floor(i/2);
+        //     std::cerr << "Rendering high image " << frame << "/" << (int) std::floor(num_images/2) << "\n";
+        //     curr_samples = high_num_samples;
+        //     image_name = "output/ppm_images/image_" + std::to_string(frame) + "_high" + ".ppm";
+        // }
 
         vec3 *fb;
         gpuErrchk(cudaMallocManaged((void **) &fb, fb_size));

@@ -41,13 +41,13 @@ __device__ void bvh_sort(sceneobject** object_list, int start, int end, int axis
     for(i = start + 1; i < end; i++) {
         key = object_list[i];
         j = i - 1;
-
-        while (j >= start && box_compare(key, object_list[j], axis)) {
+        while (start <= j && j < end && box_compare(key, object_list[j], axis)) {
             object_list[j+1] = object_list[j];
             j = j - 1;
 
         }
         object_list[j+1] = key;
+
     }
 
 }
@@ -70,7 +70,6 @@ __device__ bvh_node::bvh_node(sceneobject** src_objects, size_t start, size_t en
             right = objects[start];
         }
     } else {
-
         bvh_sort(objects, start, end, axis);
 
         size_t mid = start + range/2;
